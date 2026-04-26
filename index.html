@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Estate Sale</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #1a1310;
+    --panel: #221913;
+    --ink: #e8d9b8;
+    --gold: #c4a36a;
+    --rule: #6b4f2c;
+    --muted: #a89478;
+    --green: #8fb87a;
+    --red: #c87a6a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Georgia', 'Garamond', 'Times New Roman', serif;
+    max-width: 760px;
+    margin: 2em auto;
+    padding: 1em 2em 4em;
+    line-height: 1.55;
+  }
+  h1 {
+    font-variant: small-caps;
+    letter-spacing: 0.18em;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 0.3em;
+    text-align: center;
+    font-weight: normal;
+    margin-bottom: 0.2em;
+  }
+  .subtitle { text-align: center; color: var(--muted); font-style: italic; margin-top: 0; margin-bottom: 1.5em; }
+  h2 { font-variant: small-caps; color: var(--gold); margin-top: 1.8em; font-weight: normal; letter-spacing: 0.08em; border-bottom: 1px dotted var(--rule); padding-bottom: 0.2em; }
+  .stats {
+    display: flex;
+    gap: 2em;
+    flex-wrap: wrap;
+    padding: 0.6em 0;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    font-variant: small-caps;
+    letter-spacing: 0.05em;
+    justify-content: space-around;
+  }
+  .stats .label { color: var(--muted); }
+  .stats strong { color: var(--gold); font-weight: normal; }
+  .log { min-height: 11em; padding: 1.2em 0.4em; }
+  .log p { margin: 0.45em 0; }
+  .log .narrator { color: var(--muted); font-style: italic; }
+  .log .quote { color: var(--ink); }
+  .log .quote::before { content: '\201C'; color: var(--gold); margin-right: 0.05em; }
+  .log .quote::after { content: '\201D'; color: var(--gold); margin-left: 0.05em; }
+  .log .system { color: var(--gold); font-variant: small-caps; letter-spacing: 0.05em; }
+  .log .system strong { color: var(--ink); font-weight: normal; }
+  .log .item { font-style: italic; color: var(--ink); }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6em;
+    padding-top: 0.8em;
+    border-top: 1px solid var(--rule);
+    align-items: center;
+  }
+  button {
+    background: #2a1d14;
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    padding: 0.55em 1.1em;
+    font-family: inherit;
+    font-size: 0.95em;
+    cursor: pointer;
+    font-variant: small-caps;
+    letter-spacing: 0.06em;
+    transition: background 0.1s, border-color 0.1s;
+  }
+  button:hover:not(:disabled) { background: #3a2a1c; border-color: var(--gold); color: var(--gold); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { border-color: var(--gold); color: var(--gold); }
+  button.danger { border-color: var(--red); color: var(--red); }
+  input[type="number"] {
+    background: #2a1d14;
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    padding: 0.5em;
+    font-family: inherit;
+    font-size: 1em;
+    width: 6.5em;
+  }
+  input[type="number"]:focus { outline: none; border-color: var(--gold); }
+  .counter-group { display: inline-flex; gap: 0.4em; align-items: center; }
+  .counter-group::before { content: '$'; color: var(--muted); }
+  .inventory {
+    columns: 2;
+    column-gap: 2em;
+    font-size: 0.92em;
+  }
+  .inventory > div {
+    break-inside: avoid;
+    padding: 0.25em 0;
+    border-bottom: 1px dotted #3a2a1c;
+  }
+  .inv-name { color: var(--ink); }
+  .inv-cost { color: var(--muted); font-size: 0.9em; }
+  .empty { color: var(--muted); font-style: italic; }
+  .end-screen { text-align: center; padding: 2em 0; }
+  .end-screen h2 { border: none; }
+  .end-screen .verdict { font-size: 1.3em; color: var(--gold); margin: 1em 0; }
+  ::selection { background: var(--gold); color: var(--bg); }
+</style>
+</head>
+<body>
+  <h1>Estate Sale</h1>
+  <p class="subtitle">a satirical concern in the antiques trade</p>
+
+  <div class="stats">
+    <div><span class="label">Cash:</span> <strong id="cash">$1000</strong></div>
+    <div><span class="label">Inventory:</span> <strong id="inv-count">0</strong></div>
+    <div><span class="label">Day:</span> <strong id="day">1</strong></div>
+    <div><span class="label">Encounter:</span> <strong id="enc">0 / 4</strong></div>
+  </div>
+
+  <div id="log" class="log"></div>
+
+  <div id="controls" class="controls"></div>
+
+  <h2>Inventory</h2>
+  <div id="inventory" class="inventory"></div>
+
+  <h2>Ledger</h2>
+  <div id="ledger" class="inventory" style="font-size: 0.88em; color: var(--muted);"></div>
+
+<script>
+"use strict";
+
+// ---------- DATA ----------
+
+const ITEMS = [
+  { name: "Victorian mourning brooch", flavor: "contains a lock of someone's hair", base: 180 },
+  { name: "brass spittoon", flavor: "dented; needs polishing", base: 65 },
+  { name: "Edwardian umbrella stand", flavor: "the seller swears it's only slightly haunted", base: 220 },
+  { name: "mid-century ottoman", flavor: "cat scratches reframed as 'patina'", base: 140 },
+  { name: "Civil War-era spoon", flavor: "probably. mostly. allegedly", base: 95 },
+  { name: "taxidermied weasel", flavor: "one glass eye, the other watches you", base: 320 },
+  { name: "Depression-era cookie jar", flavor: "chip on the lid, lid rattles", base: 45 },
+  { name: "1970s lava lamp", flavor: "still works, occasionally", base: 30 },
+  { name: "Art Deco cocktail shaker", flavor: "smells faintly of gin", base: 175 },
+  { name: "hand-tinted family photograph", flavor: "subjects unsmiling, unidentified, judging you", base: 55 },
+  { name: "Bakelite rotary phone", flavor: "mustard yellow, unironically", base: 110 },
+  { name: "'Tiffany-style' lamp", flavor: "the 'style' is doing some heavy lifting", base: 240 },
+  { name: "carnival glass punch bowl", flavor: "with eleven of twelve matching cups", base: 130 },
+  { name: "civil defense siren", flavor: "supposedly still functional", base: 280 },
+  { name: "wooden cigar-store sentinel", flavor: "wildly inappropriate, wildly valuable", base: 1200 },
+  { name: "silver-plated cake stand", flavor: "the silver-plating is aspirational", base: 75 },
+  { name: "treadle Singer sewing machine", flavor: "treadles fine; threading remains a mystery", base: 150 },
+  { name: "steamer trunk", flavor: "RMS Carpathia label (almost certainly fake)", base: 380 },
+  { name: "cuckoo clock", flavor: "the cuckoo no longer cuckoos", base: 90 },
+  { name: "Russian samovar", flavor: "tilt it just right and you can almost smell the gulag", base: 260 },
+  { name: "WWI gas mask", flavor: "'great conversation piece,' seller insists", base: 165 },
+  { name: "Mason jar of marbles", flavor: "the seller is sure 'one of these is worth something'", base: 25 },
+  { name: "framed taxidermy butterfly", flavor: "wing slightly crumbled", base: 60 },
+  { name: "Hummel figurine", flavor: "smiling child holding a goose, holding a knife", base: 40 },
+  { name: "ship's compass", flavor: "still spins; doesn't necessarily point north", base: 195 },
+  { name: "porcelain Pierrot doll", flavor: "you can feel it watching you sleep", base: 85 },
+  { name: "Victrola gramophone", flavor: "needs a needle, an operator, and patience", base: 340 },
+  { name: "Bauhaus-ish armchair", flavor: "structurally questionable, aesthetically committed", base: 215 },
+  { name: "Soviet propaganda poster", flavor: "frame not included, pinholes included", base: 95 },
+  { name: "Georgian silver tea service", flavor: "incomplete; sugar tongs missing", base: 510 },
+];
+
+const SELLER_LINES = [
+  "An estate picker in a stained Carhartt drops {ITEM} on the counter.",
+  "A widow downsizing the family home carefully sets down {ITEM}.",
+  "A man with a U-Haul out front wheels in {ITEM} without explaining how he came by it.",
+  "A retired English professor presents {ITEM} along with a small unsolicited lecture.",
+  "An auction-house assistant moonlighting on her lunch break produces {ITEM} from a velvet-lined case.",
+  "A tweaker who calls everyone 'boss' hauls in {ITEM}.",
+  "A trust-fund kid 'cleaning out grandfather's place' sets {ITEM} on the counter without making eye contact.",
+  "A guy in flip-flops you've seen at every flea market in three counties slides {ITEM} across the glass.",
+  "A woman who introduces herself as 'a friend of the family' offers you {ITEM}.",
+  "A man you suspect is the original owner pretends he is not, and presents {ITEM}.",
+];
+
+const SELLER_OPENS = [
+  "I want ${P} for it.",
+  "I'll take ${P}. Firm.",
+  "${P}. And I'm doing you a favor.",
+  "${P}. Same price as last week.",
+  "${P}, and I won't go a dollar lower.",
+  "${P}. Got the same one going on eBay for double.",
+  "${P}, and I've got somebody else interested.",
+];
+
+const BUYER_LINES = [
+  "A tourist in a sun hat picks up the {ITEM}.",
+  "A serious collector with a jeweler's loupe in his shirt pocket lifts the {ITEM}.",
+  "An interior designer 'sourcing for the Hendersons' considers the {ITEM}.",
+  "A man who has been watching too much Antiques Roadshow squints at the {ITEM}.",
+  "A woman insisting her aunt had one 'just like this, only nicer' fingers the {ITEM}.",
+  "A film prop scout, in a hurry, points at the {ITEM}.",
+  "A couple celebrating an anniversary leans over the {ITEM}.",
+  "An eBay reseller who isn't subtle about it eyes the {ITEM}.",
+  "A dealer from two towns over you absolutely do not trust circles the {ITEM}.",
+  "A man who mentions he 'used to be on Pawn Stars' (he was not) examines the {ITEM}.",
+];
+
+const BUYER_OPENS = [
+  "How much? ...I'll give you ${P}.",
+  "I'll do ${P}, cash.",
+  "${P}. That's what it's worth.",
+  "${P}, take it or leave it.",
+  "${P}. I saw one at a yard sale for half that.",
+  "${P}. I'm being generous.",
+  "I have ${P} on me, that's all.",
+];
+
+const TAX_DODGE_LINES = [
+  "Oh — and I'm not paying sales tax. That's your problem.",
+  "Cash, no tax. Right? Right.",
+  "I don't do the tax thing. Just round it.",
+  "We're not doing tax on top of that. Come on.",
+  "Tax? On a private transaction? Be serious.",
+  "I'll pay the price we agreed. The tax is on you.",
+];
+
+const SELLER_WALK_LINES = [
+  "I can't go that low. Forget it.",
+  "You're wasting my time.",
+  "I'll find someone serious.",
+  "Have a good one. (Storms out.)",
+  "I'll just put it on Marketplace.",
+];
+
+const BUYER_WALK_LINES = [
+  "That's ridiculous. I'm out.",
+  "I'll think about it. (Will not.)",
+  "Highway robbery.",
+  "I saw the same thing for less in Hudson.",
+  "(Sets it back down a little too hard, leaves.)",
+];
+
+// ---------- RNG ----------
+
+function sampleNormal(mean, stdev) {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return mean + stdev * Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+}
+function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+// ---------- STATE ----------
+
+const state = {
+  cash: 1000,
+  inventory: [],
+  day: 1,
+  encountersToday: 0,
+  encountersPerDay: 4,
+  encounter: null,
+  ledger: [],   // { day, kind, name, amount, note }
+  totals: { bought: 0, sold: 0, taxEaten: 0, walks: 0 },
+  ended: false,
+};
+
+// ---------- DOM ----------
+
+const $cash = document.getElementById('cash');
+const $inv = document.getElementById('inv-count');
+const $day = document.getElementById('day');
+const $enc = document.getElementById('enc');
+const $log = document.getElementById('log');
+const $controls = document.getElementById('controls');
+const $inventory = document.getElementById('inventory');
+const $ledger = document.getElementById('ledger');
+
+function updateStats() {
+  $cash.textContent = '$' + state.cash;
+  $cash.style.color = state.cash >= 0 ? 'var(--gold)' : 'var(--red)';
+  $inv.textContent = state.inventory.length;
+  $day.textContent = state.day;
+  $enc.textContent = state.encountersToday + ' / ' + state.encountersPerDay;
+  renderInventory();
+  renderLedger();
+}
+
+function renderInventory() {
+  if (state.inventory.length === 0) {
+    $inventory.innerHTML = '<div class="empty">The shelves are bare.</div>';
+    return;
+  }
+  $inventory.innerHTML = state.inventory.map(s =>
+    '<div><span class="inv-name">' + s.item.name + '</span> ' +
+    '<span class="inv-cost">— paid $' + s.cost + ' (book $' + s.item.base + ')</span></div>'
+  ).join('');
+}
+
+function renderLedger() {
+  if (state.ledger.length === 0) { $ledger.innerHTML = '<div class="empty">No entries yet.</div>'; return; }
+  const last = state.ledger.slice(-10).reverse();
+  $ledger.innerHTML = last.map(e =>
+    '<div>Day ' + e.day + ' &middot; ' + e.kind + ': ' + e.name +
+    ' &middot; ' + (e.amount >= 0 ? '+' : '') + '$' + e.amount +
+    (e.note ? ' <em>(' + e.note + ')</em>' : '') + '</div>'
+  ).join('');
+}
+
+function clearLog() { $log.innerHTML = ''; }
+function logLine(html, cls) {
+  const p = document.createElement('p');
+  if (cls) p.className = cls;
+  p.innerHTML = html;
+  $log.appendChild(p);
+}
+function clearControls() { $controls.innerHTML = ''; }
+function btn(label, onClick, opts = {}) {
+  const b = document.createElement('button');
+  b.textContent = label;
+  if (opts.primary) b.className = 'primary';
+  if (opts.danger) b.className = 'danger';
+  if (opts.disabled) b.disabled = true;
+  b.addEventListener('click', onClick);
+  $controls.appendChild(b);
+  return b;
+}
+function counterInput(placeholder, onSubmit) {
+  const wrap = document.createElement('span');
+  wrap.className = 'counter-group';
+  const inp = document.createElement('input');
+  inp.type = 'number';
+  inp.min = 1;
+  inp.placeholder = placeholder;
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+  const go = document.createElement('button');
+  go.textContent = 'Counter';
+  go.addEventListener('click', submit);
+  wrap.appendChild(inp);
+  wrap.appendChild(go);
+  $controls.appendChild(wrap);
+  setTimeout(() => inp.focus(), 50);
+  function submit() {
+    const v = parseInt(inp.value, 10);
+    if (!Number.isFinite(v) || v < 1) { inp.focus(); return; }
+    onSubmit(v);
+  }
+}
+function italicizeItem(name) { return '<span class="item">' + name + '</span>'; }
+
+// ---------- ENCOUNTERS ----------
+
+function pickItem() { return pick(ITEMS); }
+
+function makeSellerEncounter() {
+  const item = pickItem();
+  const mult = clamp(sampleNormal(1.4, 0.42), 0.3, 2.6);
+  const askingPrice = Math.max(5, Math.round(item.base * mult));
+  const reservation = Math.max(3, Math.round(askingPrice * (0.72 + Math.random() * 0.06)));
+  return {
+    type: 'seller',
+    item,
+    line: pick(SELLER_LINES),
+    open: pick(SELLER_OPENS),
+    currentPrice: askingPrice,
+    reservation,
+    round: 0,
+  };
+}
+
+function makeBuyerEncounter() {
+  const idx = Math.floor(Math.random() * state.inventory.length);
+  const stock = state.inventory[idx];
+  const item = stock.item;
+  const mult = clamp(sampleNormal(1.0, 0.42), 0.25, 2.4);
+  const offer = Math.max(3, Math.round(item.base * mult));
+  const reservation = Math.max(offer, Math.round(offer * (1.18 + Math.random() * 0.06)));
+  return {
+    type: 'buyer',
+    item,
+    stockIdx: idx,
+    costBasis: stock.cost,
+    line: pick(BUYER_LINES),
+    open: pick(BUYER_OPENS),
+    currentPrice: offer,
+    reservation,
+    round: 0,
+  };
+}
+
+function nextEncounter() {
+  if (state.ended) return;
+  clearLog();
+  clearControls();
+
+  if (state.cash < 5 && state.inventory.length === 0) {
+    return endGame('bankrupt');
+  }
+  if (state.encountersToday >= state.encountersPerDay) {
+    return endOfDay();
+  }
+  state.encountersToday++;
+  updateStats();
+
+  const canSell = state.inventory.length > 0;
+  const canBuy = state.cash >= 5;
+  let type;
+  if (canSell && canBuy) type = Math.random() < 0.5 ? 'seller' : 'buyer';
+  else if (canSell) type = 'buyer';
+  else type = 'seller';
+
+  state.encounter = (type === 'seller') ? makeSellerEncounter() : makeBuyerEncounter();
+  if (type === 'seller') openSellerEncounter();
+  else openBuyerEncounter();
+}
+
+function openSellerEncounter() {
+  const e = state.encounter;
+  logLine(e.line.replace('{ITEM}', italicizeItem(e.item.name)), 'narrator');
+  logLine(e.item.flavor + '.', 'quote');
+  logLine(e.open.replace('${P}', '<strong>$' + e.currentPrice + '</strong>'), 'quote');
+  logLine('Guidebook estimate: $' + e.item.base + '. Cash on hand: $' + state.cash + '.', 'narrator');
+  showSellerControls();
+}
+function showSellerControls() {
+  clearControls();
+  const e = state.encounter;
+  const canAfford = state.cash >= e.currentPrice;
+  btn('Buy at $' + e.currentPrice, () => finalizeBuy(e.currentPrice), { primary: true, disabled: !canAfford });
+  counterInput('your offer', v => sellerCounterFromPlayer(v));
+  btn('Pass', () => walkAway('You shake your head. They move on.'));
+}
+function sellerCounterFromPlayer(myOffer) {
+  const e = state.encounter;
+  e.round++;
+  if (myOffer >= e.currentPrice) return finalizeBuy(e.currentPrice);
+  if (myOffer > state.cash) {
+    logLine('You don\'t actually have $' + myOffer + ' to offer.', 'system');
+    showSellerControls();
+    return;
+  }
+  if (myOffer >= e.reservation) {
+    logLine('...All right. $' + myOffer + '. You drive a hard bargain.', 'quote');
+    return finalizeBuy(myOffer);
+  }
+  if (e.round >= 3) {
+    logLine(pick(SELLER_WALK_LINES), 'quote');
+    return walkAway('They leave with the ' + e.item.name + '.');
+  }
+  let counter = Math.round((myOffer + e.currentPrice) / 2);
+  if (counter < e.reservation) counter = e.reservation;
+  if (counter >= e.currentPrice) counter = e.currentPrice - 1;
+  e.currentPrice = counter;
+  logLine('$' + myOffer + '? I can do <strong>$' + counter + '</strong>. Best I can do.', 'quote');
+  showSellerControls();
+}
+function finalizeBuy(price) {
+  const e = state.encounter;
+  if (price > state.cash) { logLine('Insufficient cash. Deal collapses.', 'system'); return walkAway(); }
+  state.cash -= price;
+  state.inventory.push({ item: e.item, cost: price });
+  state.totals.bought++;
+  state.ledger.push({ day: state.day, kind: 'bought', name: e.item.name, amount: -price });
+  logLine('You bought the ' + italicizeItem(e.item.name) + ' for $' + price + '.', 'system');
+  if (price < e.item.base) logLine('(Below book. A picker\'s win.)', 'narrator');
+  else if (price > e.item.base * 1.3) logLine('(You overpaid. You know you overpaid.)', 'narrator');
+  updateStats();
+  showContinue();
+}
+
+function openBuyerEncounter() {
+  const e = state.encounter;
+  logLine(e.line.replace('{ITEM}', italicizeItem(e.item.name)), 'narrator');
+  logLine(e.open.replace('${P}', '<strong>$' + e.currentPrice + '</strong>'), 'quote');
+  logLine('Your cost: $' + e.costBasis + '. Guidebook: $' + e.item.base + '.', 'narrator');
+  showBuyerControls();
+}
+function showBuyerControls() {
+  clearControls();
+  const e = state.encounter;
+  btn('Sell at $' + e.currentPrice, () => acceptSale(e.currentPrice), { primary: true });
+  counterInput('your asking price', v => buyerCounterFromPlayer(v));
+  btn('Refuse', () => walkAway('You wave the offer off. They move on.'));
+}
+function buyerCounterFromPlayer(myAsk) {
+  const e = state.encounter;
+  e.round++;
+  if (myAsk <= e.currentPrice) return acceptSale(e.currentPrice);
+  if (myAsk <= e.reservation) {
+    logLine('...Hmm. $' + myAsk + '. ...All right.', 'quote');
+    return acceptSale(myAsk);
+  }
+  if (e.round >= 3) {
+    logLine(pick(BUYER_WALK_LINES), 'quote');
+    return walkAway('They walk. The ' + e.item.name + ' stays on the shelf.');
+  }
+  let counter = Math.round((myAsk + e.currentPrice) / 2);
+  if (counter > e.reservation) counter = e.reservation;
+  if (counter <= e.currentPrice) counter = e.currentPrice + 1;
+  e.currentPrice = counter;
+  logLine('$' + myAsk + '? I\'ll go to <strong>$' + counter + '</strong>, no higher.', 'quote');
+  showBuyerControls();
+}
+function acceptSale(price) {
+  // 35% chance the customer refuses to pay sales tax
+  if (Math.random() < 0.35) {
+    logLine(pick(TAX_DODGE_LINES), 'quote');
+    showTaxDodgeControls(price);
+  } else {
+    finalizeSale(price, false);
+  }
+}
+function showTaxDodgeControls(price) {
+  clearControls();
+  const taxBite = Math.round(price * 0.07);
+  const youGet = price - taxBite;
+  logLine('Eat the 7% sales tax (lose $' + taxBite + ', net $' + youGet + ') or refuse and they walk.', 'system');
+  btn('Eat the tax (-$' + taxBite + ')', () => finalizeSale(price, true), { primary: true });
+  btn('Refuse — they walk', () => {
+    logLine('Fine. I\'ll go to the place down the street. <em style="color:var(--muted);font-style:italic">(They will not.)</em>', 'quote');
+    state.totals.walks++;
+    walkAway('Sale lost over $' + taxBite + ' of sales tax.');
+  }, { danger: true });
+}
+function finalizeSale(price, ateTax) {
+  const e = state.encounter;
+  let received = price;
+  let note = '';
+  if (ateTax) {
+    const tax = Math.round(price * 0.07);
+    received = price - tax;
+    state.totals.taxEaten += tax;
+    note = 'ate $' + tax + ' tax';
+    logLine('You eat the 7% tax. Net <strong>$' + received + '</strong>.', 'system');
+  } else {
+    logLine('Sold for <strong>$' + received + '</strong>.', 'system');
+  }
+  state.cash += received;
+  state.inventory.splice(e.stockIdx, 1);
+  state.totals.sold++;
+  const profit = received - e.costBasis;
+  state.ledger.push({ day: state.day, kind: profit >= 0 ? 'sold' : 'sold (loss)', name: e.item.name, amount: received, note: note });
+  if (profit >= 0) logLine('(Cost $' + e.costBasis + ' &rarr; profit <strong style="color:var(--green)">$' + profit + '</strong>.)', 'narrator');
+  else logLine('(Cost $' + e.costBasis + ' &rarr; loss <strong style="color:var(--red)">$' + (-profit) + '</strong>.)', 'narrator');
+  updateStats();
+  showContinue();
+}
+
+function walkAway(msg) {
+  if (msg) logLine(msg, 'system');
+  showContinue();
+}
+function showContinue() {
+  clearControls();
+  btn('Next →', nextEncounter, { primary: true });
+}
+
+// ---------- DAYS ----------
+
+function endOfDay() {
+  clearControls();
+  clearLog();
+  const startCash = state._dayStart || 1000;
+  const delta = state.cash - startCash;
+  logLine('— End of Day ' + state.day + ' —', 'system');
+  logLine('You lock the door. The light through the window is the color of weak tea.', 'narrator');
+  logLine('Day delta: ' + (delta >= 0 ? '+' : '') + '$' + delta + '. Inventory: ' + state.inventory.length + ' pieces.', 'system');
+  if (state.totals.taxEaten > 0) {
+    logLine('Tax eaten to date: $' + state.totals.taxEaten + '. Walks over tax: ' + state.totals.walks + '.', 'narrator');
+  }
+  btn('Begin Day ' + (state.day + 1) + ' →', () => {
+    state.day++;
+    state.encountersToday = 0;
+    state._dayStart = state.cash;
+    updateStats();
+    nextEncounter();
+  }, { primary: true });
+  btn('Close shop (end run)', () => endGame('quit'));
+}
+
+function endGame(reason) {
+  state.ended = true;
+  clearLog();
+  clearControls();
+  $controls.innerHTML = '';
+  const inventoryBookValue = state.inventory.reduce((s, x) => s + x.item.base, 0);
+  const netWorth = state.cash + inventoryBookValue;
+  const wrap = document.createElement('div');
+  wrap.className = 'end-screen';
+  let verdict;
+  if (reason === 'bankrupt') verdict = 'BANKRUPT';
+  else if (netWorth >= 3000) verdict = 'A Triumph of the Trade';
+  else if (netWorth >= 1500) verdict = 'A Modest Concern, Still Standing';
+  else if (netWorth >= 800) verdict = 'Hanging On';
+  else verdict = 'Circling the Drain';
+  wrap.innerHTML =
+    '<h2>The Shop Closes</h2>' +
+    '<div class="verdict">' + verdict + '</div>' +
+    '<p>Days survived: <strong>' + state.day + '</strong></p>' +
+    '<p>Cash: <strong>$' + state.cash + '</strong> &middot; Inventory book value: <strong>$' + inventoryBookValue + '</strong></p>' +
+    '<p>Net worth: <strong>$' + netWorth + '</strong></p>' +
+    '<p style="color:var(--muted);font-style:italic">Bought ' + state.totals.bought + ' &middot; Sold ' + state.totals.sold +
+    ' &middot; Tax eaten $' + state.totals.taxEaten + ' &middot; Walks ' + state.totals.walks + '</p>';
+  $log.appendChild(wrap);
+  btn('Start a new shop', () => location.reload(), { primary: true });
+}
+
+// ---------- INTRO ----------
+
+function intro() {
+  state._dayStart = state.cash;
+  updateStats();
+  logLine('You inherit a shop on a side street. The previous owner left an oil portrait, a smell, and $1,000 in the till.', 'narrator');
+  logLine('Pickers will bring you things. Customers will offer you less than you paid. Some will refuse to pay sales tax.', 'narrator');
+  logLine('That is the trade.', 'narrator');
+  clearControls();
+  btn('Open for business →', nextEncounter, { primary: true });
+}
+
+intro();
+</script>
+</body>
+</html>
