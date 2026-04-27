@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Estate Sale</title>
+<title>Antiques Simulator</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root {
@@ -35,6 +35,20 @@
     margin-bottom: 0.2em;
   }
   .subtitle { text-align: center; color: var(--muted); font-style: italic; margin-top: 0; margin-bottom: 1.5em; }
+  .banner {
+    margin: 0 -2em 1.5em;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    background: #000;
+    line-height: 0;
+  }
+  .banner img {
+    display: block;
+    width: 100%;
+    height: auto;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
   h2 { font-variant: small-caps; color: var(--gold); margin-top: 1.8em; font-weight: normal; letter-spacing: 0.08em; border-bottom: 1px dotted var(--rule); padding-bottom: 0.2em; }
   .stats {
     display: flex;
@@ -114,8 +128,12 @@
 </style>
 </head>
 <body>
-  <h1>Estate Sale</h1>
-  <p class="subtitle">a satirical concern in the antiques trade</p>
+  <h1>Antiques Simulator</h1>
+  <p class="subtitle">a satirical concern in the trade</p>
+
+  <div class="banner">
+    <img src="assets/store.png" alt="The interior of the shop">
+  </div>
 
   <div class="stats">
     <div><span class="label">Cash:</span> <strong id="cash">$1000</strong></div>
