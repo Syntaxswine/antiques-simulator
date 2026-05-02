@@ -124,6 +124,28 @@
   .end-screen { text-align: center; padding: 2em 0; }
   .end-screen h2 { border: none; }
   .end-screen .verdict { font-size: 1.3em; color: var(--gold); margin: 1em 0; }
+  .difficulty-screen { padding: 1em 0 2em; text-align: center; }
+  .difficulty-screen h2 { border: none; margin-bottom: 0.4em; }
+  .difficulty-screen p { color: var(--muted); font-style: italic; margin-bottom: 1.5em; }
+  .difficulty-screen .choices { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1em; }
+  .difficulty-screen .choice {
+    padding: 1.2em 0.8em;
+    border: 1px solid var(--rule);
+    background: #221913;
+    cursor: pointer;
+    transition: background 0.1s, border-color 0.1s;
+  }
+  .difficulty-screen .choice:hover { background: #3a2a1c; border-color: var(--gold); }
+  .difficulty-screen .choice .name { display: block; font-variant: small-caps; letter-spacing: 0.1em; color: var(--gold); font-size: 1.05em; margin-bottom: 0.4em; }
+  .difficulty-screen .choice .desc { display: block; color: var(--muted); font-size: 0.85em; font-style: italic; line-height: 1.4; }
+  @media (max-width: 600px) {
+    .difficulty-screen .choices { grid-template-columns: 1fr; }
+  }
+  .library { font-size: 0.92em; padding: 0.4em 0; }
+  .library .lib-row { padding: 0.3em 0; border-bottom: 1px dotted #3a2a1c; }
+  .library .owned { color: var(--gold); }
+  .library .missing { color: var(--muted); font-style: italic; }
+  .difficulty-banner { font-variant: small-caps; letter-spacing: 0.05em; color: var(--muted); font-size: 0.85em; text-align: center; padding: 0.4em 0; }
   ::selection { background: var(--gold); color: var(--bg); }
 </style>
 </head>
@@ -149,6 +171,9 @@
   <h2>Inventory</h2>
   <div id="inventory" class="inventory"></div>
 
+  <h2 id="library-heading" style="display:none">Reference Library</h2>
+  <div id="library" class="library"></div>
+
   <h2>Ledger</h2>
   <div id="ledger" class="inventory" style="font-size: 0.88em; color: var(--muted);"></div>
 
@@ -157,37 +182,67 @@
 
 // ---------- DATA ----------
 
+const CATEGORIES = {
+  furniture: "Furniture",
+  glass:     "Glass & Ceramics",
+  metal:     "Metalware & Silver",
+  curio:     "Curiosities & Ephemera",
+};
+const CATEGORY_KEYS = Object.keys(CATEGORIES);
+const GUIDE_PRICE = 50;
+
 const ITEMS = [
-  { name: "Victorian mourning brooch", flavor: "contains a lock of someone's hair", base: 180 },
-  { name: "brass spittoon", flavor: "dented; needs polishing", base: 65 },
-  { name: "Edwardian umbrella stand", flavor: "the seller swears it's only slightly haunted", base: 220 },
-  { name: "mid-century ottoman", flavor: "cat scratches reframed as 'patina'", base: 140 },
-  { name: "Civil War-era spoon", flavor: "probably. mostly. allegedly", base: 95 },
-  { name: "taxidermied weasel", flavor: "one glass eye, the other watches you", base: 320 },
-  { name: "Depression-era cookie jar", flavor: "chip on the lid, lid rattles", base: 45 },
-  { name: "1970s lava lamp", flavor: "still works, occasionally", base: 30 },
-  { name: "Art Deco cocktail shaker", flavor: "smells faintly of gin", base: 175 },
-  { name: "hand-tinted family photograph", flavor: "subjects unsmiling, unidentified, judging you", base: 55 },
-  { name: "Bakelite rotary phone", flavor: "mustard yellow, unironically", base: 110 },
-  { name: "'Tiffany-style' lamp", flavor: "the 'style' is doing some heavy lifting", base: 240 },
-  { name: "carnival glass punch bowl", flavor: "with eleven of twelve matching cups", base: 130 },
-  { name: "civil defense siren", flavor: "supposedly still functional", base: 280 },
-  { name: "wooden cigar-store sentinel", flavor: "wildly inappropriate, wildly valuable", base: 1200 },
-  { name: "silver-plated cake stand", flavor: "the silver-plating is aspirational", base: 75 },
-  { name: "treadle Singer sewing machine", flavor: "treadles fine; threading remains a mystery", base: 150 },
-  { name: "steamer trunk", flavor: "RMS Carpathia label (almost certainly fake)", base: 380 },
-  { name: "cuckoo clock", flavor: "the cuckoo no longer cuckoos", base: 90 },
-  { name: "Russian samovar", flavor: "tilt it just right and you can almost smell the gulag", base: 260 },
-  { name: "WWI gas mask", flavor: "'great conversation piece,' seller insists", base: 165 },
-  { name: "Mason jar of marbles", flavor: "the seller is sure 'one of these is worth something'", base: 25 },
-  { name: "framed taxidermy butterfly", flavor: "wing slightly crumbled", base: 60 },
-  { name: "Hummel figurine", flavor: "smiling child holding a goose, holding a knife", base: 40 },
-  { name: "ship's compass", flavor: "still spins; doesn't necessarily point north", base: 195 },
-  { name: "porcelain Pierrot doll", flavor: "you can feel it watching you sleep", base: 85 },
-  { name: "Victrola gramophone", flavor: "needs a needle, an operator, and patience", base: 340 },
-  { name: "Bauhaus-ish armchair", flavor: "structurally questionable, aesthetically committed", base: 215 },
-  { name: "Soviet propaganda poster", flavor: "frame not included, pinholes included", base: 95 },
-  { name: "Georgian silver tea service", flavor: "incomplete; sugar tongs missing", base: 510 },
+  { name: "Victorian mourning brooch", flavor: "contains a lock of someone's hair", base: 180, cat: "glass" },
+  { name: "brass spittoon", flavor: "dented; needs polishing", base: 65, cat: "metal" },
+  { name: "Edwardian umbrella stand", flavor: "the seller swears it's only slightly haunted", base: 220, cat: "furniture" },
+  { name: "mid-century ottoman", flavor: "cat scratches reframed as 'patina'", base: 140, cat: "furniture" },
+  { name: "Civil War-era spoon", flavor: "probably. mostly. allegedly", base: 95, cat: "metal" },
+  { name: "taxidermied weasel", flavor: "one glass eye, the other watches you", base: 320, cat: "curio" },
+  { name: "Depression-era cookie jar", flavor: "chip on the lid, lid rattles", base: 45, cat: "glass" },
+  { name: "1970s lava lamp", flavor: "still works, occasionally", base: 30, cat: "glass" },
+  { name: "Art Deco cocktail shaker", flavor: "smells faintly of gin", base: 175, cat: "metal" },
+  { name: "hand-tinted family photograph", flavor: "subjects unsmiling, unidentified, judging you", base: 55, cat: "curio" },
+  { name: "Bakelite rotary phone", flavor: "mustard yellow, unironically", base: 110, cat: "curio" },
+  { name: "'Tiffany-style' lamp", flavor: "the 'style' is doing some heavy lifting", base: 240, cat: "glass" },
+  { name: "carnival glass punch bowl", flavor: "with eleven of twelve matching cups", base: 130, cat: "glass" },
+  { name: "civil defense siren", flavor: "supposedly still functional", base: 280, cat: "curio" },
+  { name: "wooden cigar-store sentinel", flavor: "wildly inappropriate, wildly valuable", base: 1200, cat: "curio" },
+  { name: "silver-plated cake stand", flavor: "the silver-plating is aspirational", base: 75, cat: "metal" },
+  { name: "treadle Singer sewing machine", flavor: "treadles fine; threading remains a mystery", base: 150, cat: "furniture" },
+  { name: "steamer trunk", flavor: "RMS Carpathia label (almost certainly fake)", base: 380, cat: "furniture" },
+  { name: "cuckoo clock", flavor: "the cuckoo no longer cuckoos", base: 90, cat: "metal" },
+  { name: "Russian samovar", flavor: "tilt it just right and you can almost smell the gulag", base: 260, cat: "metal" },
+  { name: "WWI gas mask", flavor: "'great conversation piece,' seller insists", base: 165, cat: "curio" },
+  { name: "Mason jar of marbles", flavor: "the seller is sure 'one of these is worth something'", base: 25, cat: "curio" },
+  { name: "framed taxidermy butterfly", flavor: "wing slightly crumbled", base: 60, cat: "curio" },
+  { name: "Hummel figurine", flavor: "smiling child holding a goose, holding a knife", base: 40, cat: "glass" },
+  { name: "ship's compass", flavor: "still spins; doesn't necessarily point north", base: 195, cat: "metal" },
+  { name: "porcelain Pierrot doll", flavor: "you can feel it watching you sleep", base: 85, cat: "glass" },
+  { name: "Victrola gramophone", flavor: "needs a needle, an operator, and patience", base: 340, cat: "furniture" },
+  { name: "Bauhaus-ish armchair", flavor: "structurally questionable, aesthetically committed", base: 215, cat: "furniture" },
+  { name: "Soviet propaganda poster", flavor: "frame not included, pinholes included", base: 95, cat: "curio" },
+  { name: "Georgian silver tea service", flavor: "incomplete; sugar tongs missing", base: 510, cat: "metal" },
+];
+
+const GUIDE_LINES = [
+  "A door-to-door bookseller in a too-large overcoat sets a fresh edition of {CAT} on the counter.",
+  "A sweating man with a satchel produces a slim volume titled {CAT}, marked $50.",
+  "A regional Schroeder's representative arrives, last year's {CAT} guide already in hand.",
+  "A retired appraiser, supplementing his pension, offers his personal copy of {CAT} for $50.",
+  "An itinerant book-cart pulls up. Today's offering: {CAT}. Fifty dollars, cash.",
+];
+
+const GUIDE_OPENS = [
+  "Fifty dollars. Going up next quarter.",
+  "Fifty dollars and you'll thank me by Tuesday.",
+  "Fifty even. Take it or leave it.",
+  "Fifty. The going rate. I don't haggle on books.",
+];
+
+const GUIDE_PASS_LINES = [
+  "Suit yourself. Your loss. (Trundles off.)",
+  "Fine. I'll find a dealer who actually wants to know what things are worth.",
+  "Hmf. Some of us read.",
 ];
 
 const SELLER_LINES = [
@@ -284,7 +339,15 @@ const state = {
   ledger: [],   // { day, kind, name, amount, note }
   totals: { bought: 0, sold: 0, taxEaten: 0, walks: 0 },
   ended: false,
+  difficulty: 'easy',  // 'easy' | 'normal' | 'hard'
+  guides: new Set(),   // category keys the player has purchased (Normal only)
 };
+
+function knowsBook(item) {
+  if (state.difficulty === 'easy') return true;
+  if (state.difficulty === 'hard') return false;
+  return state.guides.has(item.cat);
+}
 
 // ---------- DOM ----------
 
@@ -295,6 +358,8 @@ const $enc = document.getElementById('enc');
 const $log = document.getElementById('log');
 const $controls = document.getElementById('controls');
 const $inventory = document.getElementById('inventory');
+const $library = document.getElementById('library');
+const $libraryHeading = document.getElementById('library-heading');
 const $ledger = document.getElementById('ledger');
 
 function updateStats() {
@@ -304,6 +369,7 @@ function updateStats() {
   $day.textContent = state.day;
   $enc.textContent = state.encountersToday + ' / ' + state.encountersPerDay;
   renderInventory();
+  renderLibrary();
   renderLedger();
 }
 
@@ -312,10 +378,27 @@ function renderInventory() {
     $inventory.innerHTML = '<div class="empty">The shelves are bare.</div>';
     return;
   }
-  $inventory.innerHTML = state.inventory.map(s =>
-    '<div><span class="inv-name">' + s.item.name + '</span> ' +
-    '<span class="inv-cost">— paid $' + s.cost + ' (book $' + s.item.base + ')</span></div>'
-  ).join('');
+  $inventory.innerHTML = state.inventory.map(s => {
+    const tail = knowsBook(s.item) ? ' (book $' + s.item.base + ')' : '';
+    return '<div><span class="inv-name">' + s.item.name + '</span> ' +
+      '<span class="inv-cost">— paid $' + s.cost + tail + '</span></div>';
+  }).join('');
+}
+
+function renderLibrary() {
+  if (state.difficulty !== 'normal') {
+    $libraryHeading.style.display = 'none';
+    $library.innerHTML = '';
+    return;
+  }
+  $libraryHeading.style.display = '';
+  $library.innerHTML = CATEGORY_KEYS.map(k => {
+    const owned = state.guides.has(k);
+    const cls = owned ? 'owned' : 'missing';
+    const mark = owned ? '✓' : '—';
+    const note = owned ? 'guide owned' : 'no guide; book values hidden';
+    return '<div class="lib-row ' + cls + '">' + mark + ' ' + CATEGORIES[k] + ' <span style="font-size:0.85em">— ' + note + '</span></div>';
+  }).join('');
 }
 
 function renderLedger() {
@@ -423,6 +506,13 @@ function nextEncounter() {
   state.encountersToday++;
   updateStats();
 
+  // 15% chance of a guide-bookseller encounter on Normal mode (only if guides remain)
+  const missingGuides = CATEGORY_KEYS.filter(k => !state.guides.has(k));
+  if (state.difficulty === 'normal' && missingGuides.length > 0 && Math.random() < 0.15) {
+    state.encounter = makeGuideEncounter(missingGuides);
+    return openGuideEncounter();
+  }
+
   const canSell = state.inventory.length > 0;
   const canBuy = state.cash >= 5;
   let type;
@@ -435,12 +525,59 @@ function nextEncounter() {
   else openBuyerEncounter();
 }
 
+function makeGuideEncounter(missingGuides) {
+  const cat = pick(missingGuides);
+  return {
+    type: 'guide',
+    cat,
+    line: pick(GUIDE_LINES),
+    open: pick(GUIDE_OPENS),
+    price: GUIDE_PRICE,
+  };
+}
+function openGuideEncounter() {
+  const e = state.encounter;
+  const catName = CATEGORIES[e.cat];
+  logLine(e.line.replace('{CAT}', '<span class="item">' + catName + '</span>'), 'narrator');
+  logLine(e.open, 'quote');
+  logLine('A ' + catName + ' price guide reveals book values for that category from now on.', 'narrator');
+  logLine('Cash on hand: $' + state.cash + '.', 'narrator');
+  showGuideControls();
+}
+function showGuideControls() {
+  clearControls();
+  const e = state.encounter;
+  const canAfford = state.cash >= e.price;
+  btn('Buy guide ($' + e.price + ')', () => acceptGuide(), { primary: true, disabled: !canAfford });
+  btn('Pass', () => {
+    logLine(pick(GUIDE_PASS_LINES), 'quote');
+    walkAway();
+  });
+}
+function acceptGuide() {
+  const e = state.encounter;
+  if (state.cash < e.price) return;
+  state.cash -= e.price;
+  state.guides.add(e.cat);
+  state.ledger.push({ day: state.day, kind: 'bought guide', name: CATEGORIES[e.cat], amount: -e.price });
+  logLine('You buy the ' + CATEGORIES[e.cat] + ' guide. Book values for that category will now appear.', 'system');
+  updateStats();
+  showContinue();
+}
+
 function openSellerEncounter() {
   const e = state.encounter;
   logLine(e.line.replace('{ITEM}', italicizeItem(e.item.name)), 'narrator');
   logLine(e.item.flavor + '.', 'quote');
   logLine(e.open.replace('${P}', '<strong>$' + e.currentPrice + '</strong>'), 'quote');
-  logLine('Guidebook estimate: $' + e.item.base + '. Cash on hand: $' + state.cash + '.', 'narrator');
+  if (knowsBook(e.item)) {
+    logLine('Guidebook estimate: $' + e.item.base + '. Cash on hand: $' + state.cash + '.', 'narrator');
+  } else {
+    const tail = (state.difficulty === 'normal')
+      ? ' (You don\'t own a ' + CATEGORIES[e.item.cat] + ' price guide.)'
+      : '';
+    logLine('Cash on hand: $' + state.cash + '.' + tail, 'narrator');
+  }
   showSellerControls();
 }
 function showSellerControls() {
@@ -483,8 +620,10 @@ function finalizeBuy(price) {
   state.totals.bought++;
   state.ledger.push({ day: state.day, kind: 'bought', name: e.item.name, amount: -price });
   logLine('You bought the ' + italicizeItem(e.item.name) + ' for $' + price + '.', 'system');
-  if (price < e.item.base) logLine('(Below book. A picker\'s win.)', 'narrator');
-  else if (price > e.item.base * 1.3) logLine('(You overpaid. You know you overpaid.)', 'narrator');
+  if (knowsBook(e.item)) {
+    if (price < e.item.base) logLine('(Below book. A picker\'s win.)', 'narrator');
+    else if (price > e.item.base * 1.3) logLine('(You overpaid. You know you overpaid.)', 'narrator');
+  }
   updateStats();
   showContinue();
 }
@@ -493,7 +632,11 @@ function openBuyerEncounter() {
   const e = state.encounter;
   logLine(e.line.replace('{ITEM}', italicizeItem(e.item.name)), 'narrator');
   logLine(e.open.replace('${P}', '<strong>$' + e.currentPrice + '</strong>'), 'quote');
-  logLine('Your cost: $' + e.costBasis + '. Guidebook: $' + e.item.base + '.', 'narrator');
+  if (knowsBook(e.item)) {
+    logLine('Your cost: $' + e.costBasis + '. Guidebook: $' + e.item.base + '.', 'narrator');
+  } else {
+    logLine('Your cost: $' + e.costBasis + '.', 'narrator');
+  }
   showBuyerControls();
 }
 function showBuyerControls() {
@@ -628,17 +771,56 @@ function endGame(reason) {
 
 // ---------- INTRO ----------
 
+function chooseDifficulty() {
+  clearLog();
+  clearControls();
+  const wrap = document.createElement('div');
+  wrap.className = 'difficulty-screen';
+  wrap.innerHTML =
+    '<h2>Select a Difficulty</h2>' +
+    '<p>You can\'t change this once the shop opens.</p>' +
+    '<div class="choices">' +
+      '<div class="choice" data-diff="easy">' +
+        '<span class="name">Easy</span>' +
+        '<span class="desc">Book values shown for every item. Suitable for first-time dealers and the credulous.</span>' +
+      '</div>' +
+      '<div class="choice" data-diff="normal">' +
+        '<span class="name">Normal</span>' +
+        '<span class="desc">Book values hidden. Buy a price guide ($50) for each category from a passing bookseller to unlock its values.</span>' +
+      '</div>' +
+      '<div class="choice" data-diff="hard">' +
+        '<span class="name">Hard</span>' +
+        '<span class="desc">No price guides exist. You either know the business or you don\'t.</span>' +
+      '</div>' +
+    '</div>';
+  $log.appendChild(wrap);
+  wrap.querySelectorAll('.choice').forEach(el => {
+    el.addEventListener('click', () => {
+      state.difficulty = el.getAttribute('data-diff');
+      intro();
+    });
+  });
+}
+
 function intro() {
   state._dayStart = state.cash;
   updateStats();
+  clearLog();
   logLine('You inherit a shop on a side street. The previous owner left an oil portrait, a smell, and $1,000 in the till.', 'narrator');
   logLine('Pickers will bring you things. Customers will offer you less than you paid. Some will refuse to pay sales tax.', 'narrator');
-  logLine('That is the trade.', 'narrator');
+  if (state.difficulty === 'easy') {
+    logLine('Mode: Easy. The price guides are open in front of you.', 'system');
+  } else if (state.difficulty === 'normal') {
+    logLine('Mode: Normal. The price guides are upstairs in the previous owner\'s estate, which is to say nowhere. Booksellers come around. They charge $50.', 'system');
+  } else {
+    logLine('Mode: Hard. No guides. No safety net. Either you know the trade, or the trade learns you.', 'system');
+  }
+  logLine('That is the business.', 'narrator');
   clearControls();
   btn('Open for business →', nextEncounter, { primary: true });
 }
 
-intro();
+chooseDifficulty();
 </script>
 </body>
 </html>
