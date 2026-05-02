@@ -316,6 +316,23 @@ const BUYER_WALK_LINES = [
   "(Sets it back down a little too hard, leaves.)",
 ];
 
+const BUYER_INSULT_LINES = [
+  "Are you joking? Goodbye.",
+  "I'm not dignifying that with a counter. (Walks out.)",
+  "You think I just got off the bus from somewhere?",
+  "Come on. Be serious. Or don't. (Door slams.)",
+  "I'm done. Lose my number.",
+  "That's not a price. That's a personal insult.",
+];
+
+const SELLER_INSULT_LINES = [
+  "If that's where you're starting, we're not finishing.",
+  "I'd rather donate it. (Picks it back up.)",
+  "Hard pass. (Leaves.)",
+  "You and I are not going to do business today.",
+  "I'll find a dealer who isn't trying to fleece me.",
+];
+
 // ---------- RNG ----------
 
 function sampleNormal(mean, stdev) {
@@ -461,6 +478,8 @@ function makeSellerEncounter() {
   const mult = clamp(sampleNormal(1.4, 0.42), 0.3, 2.6);
   const askingPrice = Math.max(5, Math.round(item.base * mult));
   const reservation = Math.max(3, Math.round(askingPrice * (0.72 + Math.random() * 0.06)));
+  // Insulting lowball: at or below ~40% of asking, or ~half of reservation. Below this they walk immediately.
+  const walkThreshold = Math.max(2, Math.min(Math.round(reservation * 0.5), Math.round(askingPrice * 0.4)));
   return {
     type: 'seller',
     item,
@@ -468,6 +487,7 @@ function makeSellerEncounter() {
     open: pick(SELLER_OPENS),
     currentPrice: askingPrice,
     reservation,
+    walkThreshold,
     round: 0,
   };
 }
@@ -479,6 +499,9 @@ function makeBuyerEncounter() {
   const mult = clamp(sampleNormal(1.0, 0.42), 0.25, 2.4);
   const offer = Math.max(3, Math.round(item.base * mult));
   const reservation = Math.max(offer, Math.round(offer * (1.18 + Math.random() * 0.06)));
+  // Insulting overprice: roughly 1.6× their reservation, with a floor of 2.5× their initial offer.
+  // Asks above this make the buyer walk immediately — punishes "probe with $9999" tactics.
+  const walkThreshold = Math.max(Math.round(reservation * 1.6), Math.round(offer * 2.5));
   return {
     type: 'buyer',
     item,
@@ -488,6 +511,7 @@ function makeBuyerEncounter() {
     open: pick(BUYER_OPENS),
     currentPrice: offer,
     reservation,
+    walkThreshold,
     round: 0,
   };
 }
@@ -590,13 +614,18 @@ function showSellerControls() {
 }
 function sellerCounterFromPlayer(myOffer) {
   const e = state.encounter;
-  e.round++;
-  if (myOffer >= e.currentPrice) return finalizeBuy(e.currentPrice);
   if (myOffer > state.cash) {
     logLine('You don\'t actually have $' + myOffer + ' to offer.', 'system');
     showSellerControls();
     return;
   }
+  // Insulting lowball — they walk immediately, encounter wasted.
+  if (myOffer < e.walkThreshold) {
+    logLine(pick(SELLER_INSULT_LINES), 'quote');
+    return walkAway('They leave with the ' + e.item.name + '. Word of insulting offers gets around.');
+  }
+  e.round++;
+  if (myOffer >= e.currentPrice) return finalizeBuy(e.currentPrice);
   if (myOffer >= e.reservation) {
     logLine('...All right. $' + myOffer + '. You drive a hard bargain.', 'quote');
     return finalizeBuy(myOffer);
@@ -605,11 +634,21 @@ function sellerCounterFromPlayer(myOffer) {
     logLine(pick(SELLER_WALK_LINES), 'quote');
     return walkAway('They leave with the ' + e.item.name + '.');
   }
-  let counter = Math.round((myOffer + e.currentPrice) / 2);
-  if (counter < e.reservation) counter = e.reservation;
-  if (counter >= e.currentPrice) counter = e.currentPrice - 1;
+  // Randomized step toward reservation; never lands at exactly midpoint or reservation,
+  // so player can't probe to extract the exact floor.
+  const gap = e.currentPrice - e.reservation;
+  let counter;
+  if (gap <= 1) {
+    counter = e.currentPrice;  // already at floor; hold
+  } else {
+    const stepFrac = 0.30 + Math.random() * 0.45;  // move 30-75% of remaining gap
+    const step = Math.max(1, Math.round(gap * stepFrac));
+    counter = e.currentPrice - step;
+    if (counter < e.reservation) counter = e.reservation;
+  }
   e.currentPrice = counter;
-  logLine('$' + myOffer + '? I can do <strong>$' + counter + '</strong>. Best I can do.', 'quote');
+  const closer = (e.round >= 2) ? 'Final offer.' : 'Best I can do.';
+  logLine('$' + myOffer + '? I can do <strong>$' + counter + '</strong>. ' + closer, 'quote');
   showSellerControls();
 }
 function finalizeBuy(price) {
@@ -648,6 +687,11 @@ function showBuyerControls() {
 }
 function buyerCounterFromPlayer(myAsk) {
   const e = state.encounter;
+  // Insulting overprice — they walk, sale lost. Punishes "probe with $9999."
+  if (myAsk > e.walkThreshold) {
+    logLine(pick(BUYER_INSULT_LINES), 'quote');
+    return walkAway('They walk. The ' + e.item.name + ' stays on the shelf — and they\'ll tell their friends.');
+  }
   e.round++;
   if (myAsk <= e.currentPrice) return acceptSale(e.currentPrice);
   if (myAsk <= e.reservation) {
@@ -658,11 +702,19 @@ function buyerCounterFromPlayer(myAsk) {
     logLine(pick(BUYER_WALK_LINES), 'quote');
     return walkAway('They walk. The ' + e.item.name + ' stays on the shelf.');
   }
-  let counter = Math.round((myAsk + e.currentPrice) / 2);
-  if (counter > e.reservation) counter = e.reservation;
-  if (counter <= e.currentPrice) counter = e.currentPrice + 1;
+  const gap = e.reservation - e.currentPrice;
+  let counter;
+  if (gap <= 1) {
+    counter = e.currentPrice;
+  } else {
+    const stepFrac = 0.30 + Math.random() * 0.45;
+    const step = Math.max(1, Math.round(gap * stepFrac));
+    counter = e.currentPrice + step;
+    if (counter > e.reservation) counter = e.reservation;
+  }
   e.currentPrice = counter;
-  logLine('$' + myAsk + '? I\'ll go to <strong>$' + counter + '</strong>, no higher.', 'quote');
+  const closer = (e.round >= 2) ? 'That\'s my last word.' : 'No higher.';
+  logLine('$' + myAsk + '? I\'ll go to <strong>$' + counter + '</strong>. ' + closer, 'quote');
   showBuyerControls();
 }
 function acceptSale(price) {
